@@ -1,0 +1,35 @@
+let ConfigRules = datatable(ConfigurationName:string, SCID:string)
+[
+    "Turn on Tamper Protection","scid-2003",
+    "Enable cloud-delivered protection","scid-2016",
+    "Enable Network Protection","scid-96",
+    "Enable Microsoft Defender Antivirus email scanning","scid-90",
+    "Turn on Microsoft Defender Credential Guard","scid-2080",
+    "Turn on Microsoft Defender for Endpoint sensor","scid-2000",
+    "Enable 'Local Security Authority (LSA) protection' on Windows 11 22h2 and higher","scid-102"
+];
+let SCIDList = ConfigRules | project SCID;
+DeviceTvmSecureConfigurationAssessment
+| where ConfigurationId in (SCIDList)
+| where isnotnull(IsCompliant)
+| summarize arg_max(Timestamp, DeviceId, DeviceName, IsCompliant) by DeviceId, ConfigurationId
+| extend 
+    CompliantFlag = iff(IsCompliant == 1, 1, 0),
+    ExposedFlag = iff(IsCompliant == 0, 1, 0)
+| summarize 
+    CompliantDevices = dcountif(DeviceId, CompliantFlag == 1),
+    ExposedDevices = dcountif(DeviceId, ExposedFlag == 1),
+    ExposedDevicesList = make_set_if(DeviceName, ExposedFlag == 1)
+by ConfigurationId
+| extend TotalDevices = CompliantDevices + ExposedDevices
+| join kind=inner ConfigRules on $left.ConfigurationId == $right.SCID
+| extend 
+    ExposedDevicesRatio = strcat(ExposedDevices,"/",TotalDevices),
+    CompliantDevicesInfo = strcat(CompliantDevices," (",round(100.0 * CompliantDevices / TotalDevices, 0), "%)")
+| project 
+    ConfigurationName,
+    SCID,
+    ExposedDevicesRatio,
+    ExposedDevicesList,
+    CompliantDevicesInfo
+| order by ConfigurationName asc
