@@ -1,0 +1,6 @@
+DeviceEvents 
+| where ActionType startswith "ASR"
+| extend Fields=parse_json(AdditionalFields)
+| extend IsAudit = tostring(Fields.IsAudit)
+| where IsAudit == "true"
+| where ActionType in ("AsrOfficeCommAppChildProcessAudited")
